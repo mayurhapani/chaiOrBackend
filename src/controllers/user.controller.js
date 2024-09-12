@@ -1,5 +1,8 @@
+import { userModel } from "../models/user.model.js";
 import { ApiError } from "../utils/apiError.js";
+import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 const registerUser = asyncHandler(async (req, res) => {
   //get user details
@@ -38,13 +41,49 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   //check if user already exist //email/username
+  const existedUser = userModel.findOne({
+    $or: [{ email }, { username }],
+  });
+
+  if (existedUser)
+    throw new ApiError(409, "User with email or username already exists");
+
   //files //avatar and cover image
+  const avatarLocalPath = req.files?.avatar[0]?.path;
+  const coverLocalPath = req.files?.coverImage[0]?.path;
+
+  if (avatarLocalPath) throw new ApiError(400, "Avatar image path not found");
+
   //upload files to cloudinary server
-  //hash password
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  const coverImage = await uploadOnCloudinary(coverLocalPath);
+
+  if (avatarLocalPath) throw new ApiError(400, "Avatar file is required");
+
   //create user object and create db entry
+  const user = await userModel.create({
+    fullName,
+    avatar: avatar.url,
+    coverImage: coverImage?.url || "",
+    username: username.toLowerCase(),
+    email,
+    password,
+  });
+
   //remove password and refresh token from response
+  const createdUser = await userModel
+    .findById(user._id)
+    .select("-password -refreshToken");
+
   //check user created or not
+  if (!createdUser) {
+    throw new ApiError(500, "something went wrong while registering user");
+  }
+
   //return response
+  return res
+    .status(201)
+    .json(new ApiResponse(200), createdUser, "User registered successfully");
 });
 
 export { registerUser };
