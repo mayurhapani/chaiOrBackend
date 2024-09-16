@@ -41,7 +41,7 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   //check if user already exist //email/username
-  const existedUser = userModel.findOne({
+  const existedUser = await userModel.findOne({
     $or: [{ email }, { username }],
   });
 
@@ -50,15 +50,22 @@ const registerUser = asyncHandler(async (req, res) => {
 
   //files //avatar and cover image
   const avatarLocalPath = req.files?.avatar[0]?.path;
-  const coverLocalPath = req.files?.coverImage[0]?.path;
+  let coverLocalPath;
+  if (
+    req.file &&
+    Array.isArray(req.file.coverImage) &&
+    req.file.coverImage.length > 0
+  ) {
+    coverLocalPath = req.files.coverImage[0].path;
+  }
 
-  if (avatarLocalPath) throw new ApiError(400, "Avatar image path not found");
+  if (!avatarLocalPath) throw new ApiError(400, "Avatar image path not found");
 
   //upload files to cloudinary server
   const avatar = await uploadOnCloudinary(avatarLocalPath);
   const coverImage = await uploadOnCloudinary(coverLocalPath);
 
-  if (avatarLocalPath) throw new ApiError(400, "Avatar file is required");
+  if (!avatar) throw new ApiError(400, "Avatar file is required");
 
   //create user object and create db entry
   const user = await userModel.create({
@@ -83,7 +90,7 @@ const registerUser = asyncHandler(async (req, res) => {
   //return response
   return res
     .status(201)
-    .json(new ApiResponse(200), createdUser, "User registered successfully");
+    .json(new ApiResponse(200, createdUser, "User registered successfully"));
 });
 
 export { registerUser };
